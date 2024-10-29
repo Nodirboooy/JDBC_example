@@ -1,0 +1,160 @@
+create table users_test(
+                                 id serial primary key,
+                                 name varchar ,
+                                 password varchar,
+                                 email varchar
+);
+
+
+create  table cards_of_user (
+                                id SERIAL PRIMARY KEY,
+                                bank_name VARCHAR(255),
+                                expiry_date DATE,
+                                user_id INT REFERENCES users_test(id)
+);
+
+select * from users_test;
+
+
+ALTER TABLE users_test ADD COLUMN username VARCHAR UNIQUE;
+ALTER TABLE users_test ADD COLUMN phone_number VARCHAR UNIQUE;
+
+
+
+
+create or replace function sign_up(
+    p_name varchar,
+    p_email varchar,
+    p_password varchar,
+    p_username varchar,
+    p_phone_number varchar
+) returns varchar as $$
+declare
+    email_pattern text := '%@gmail.com';
+begin
+
+    if not p_email like email_pattern then
+        return 'email @gmail.com bilan tugashi shart';
+    end if;
+
+    if exists (select 1 from users_test where email = p_email) then
+        return 'ushbu email allaqon ro‘yxatdan o‘tgan';
+    end if;
+
+    if exists (select 1 from users_test where username = p_username) then
+        return 'ushbu username allaqon ro‘yxatdan o‘tgan';
+    end if;
+
+    if exists (select 1 from users_test where phone_number = p_phone_number) then
+        return 'ushbu telefon raqami allaqon ro‘yxatdan o‘tgan';
+    end if;
+
+    if length(p_password) < 8 then
+        return 'parol 8 ta belgidan kam bo‘lmasligi kerak';
+    end if;
+
+    if p_password !~ '[A-Z]' then
+        return 'parol kamida bitta katta harf bo‘lishi kerak';
+    end if;
+
+    if p_password !~ '[a-z]' then
+        return 'parol kamida bitta kichik harf bo‘lishi kerak';
+    end if;
+
+    if p_password !~ '[0-9]' then
+        return 'parol kamida bitta raqam bo‘lishi kerak';
+    end if;
+
+    if p_password !~ '[^a-zA-Z0-9]' then
+        return 'parol kamida bitta belgi (maxsus belgi) bo‘lishi kerak';
+    end if;
+
+
+    insert into users_test (name, email, password, username, phone_number)
+    values (p_name, p_email, p_password, p_username, p_phone_number);
+
+    return 'foydalanuvchi muvaffaqiyatli ro‘yxatdan o‘tkazildi';
+end;
+$$ language plpgsql;
+
+
+
+CREATE OR REPLACE FUNCTION sign_in(
+    p_email VARCHAR,
+    p_password VARCHAR
+) RETURNS varchar AS $$
+DECLARE
+    stored_password VARCHAR;
+BEGIN
+
+    SELECT password INTO stored_password
+    FROM users_test
+    WHERE email = p_email;
+
+    IF NOT FOUND OR stored_password != p_password THEN
+        RETURN 'Email yoki parol noto‘g‘ri';
+    END IF;
+    RETURN 'Tizimga kirish muvaffaqiyatli';
+END;
+$$ LANGUAGE plpgsql;
+
+
+select * from cards_of_user;
+
+CREATE OR REPLACE FUNCTION add_card(
+    i_user_id INT ,
+    i_bank_name VARCHAR ,
+    i_expiry_date DATE
+) RETURNS TEXT AS $$
+BEGIN
+
+    IF NOT EXISTS (SELECT 1 FROM users_test WHERE id = i_user_id) THEN
+        RETURN 'Bunday foydalanuvchi mavjud emas';
+    END IF;
+
+
+    INSERT INTO cards_of_user (user_id, bank_name, expiry_date)
+    VALUES (i_user_id, i_bank_name, i_expiry_date);
+
+    RETURN 'Karta muvaffaqiyatli qo‘shildi';
+EXCEPTION WHEN foreign_key_violation THEN
+    RETURN 'Kiritilgan foydalanuvchi identifikatori noto‘g‘ri';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_my_cards(i_user_id INT DEFAULT NULL)
+    RETURNS TABLE (
+                      card_id INT,
+                      user_id INT,
+                      bank_name VARCHAR,
+                      expiry_date DATE
+                  ) AS $$
+BEGIN
+
+        RETURN QUERY
+            SELECT c.id AS card_id, c.user_id, c.bank_name, c.expiry_date
+            FROM cards_of_user c
+            WHERE c.user_id = i_user_id;
+
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+
+create or replace function delete_card(i_card_id int)
+    returns void as $$
+begin
+
+    if exists (select 1 from cards_of_user where id = i_card_id) then
+        delete from cards_of_user where id = i_card_id;
+    else
+        raise notice 'karta idsi % mavjud emas.', i_card_id;
+    end if;
+end;
+$$ language plpgsql;
+
+select *from users_test;
+select * from cards_of_user;
+
+
